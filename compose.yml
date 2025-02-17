@@ -1,0 +1,82 @@
+version: "3.9"
+
+# On définit les différents services
+services:
+
+  # Poll qui est ap.py permettant de récupérer les votes
+  poll:
+    # Build renvoi au dossier contenant le Dockerfile de poll
+    build: ./poll
+    #On définit le port
+    ports:
+      - "5000:80"
+    # Redémarrage automatique, peut servir en cas d'erreur
+    restart: always
+    # Définis les dépendance pour gestion de l'ordre de lancement
+    depends_on:
+      - redis
+      - worker
+    # Appel le fichier .env
+    env_file: .env
+    # Défini les réseaux auxquels poll doit pouvoir se connecter
+    networks:
+      - poll-tier
+      - back-tier
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: always
+    networks:
+      - back-tier
+
+  worker:
+    build: ./worker
+    restart: always
+    depends_on:
+      - postgres
+      - redis
+    env_file: .env
+    networks:
+      - back-tier
+
+  postgres:
+    # Image utilisé pour créer le service
+    image: postgres:15-alpine
+    restart: always
+    # Les variables d'environnement pour la base de données
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    # On définit le volume pour la base de données
+    volumes:
+      # Emplacement du volume db-data
+      - db-data:/var/lib/postgresql/data
+      # Emplacement du fichier schema.sql
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    networks:
+      - back-tier
+
+  result:
+    build: ./result
+    ports:
+      - "5001:80"
+    restart: always
+    depends_on:
+      - postgres
+    env_file: .env
+    networks:
+      - result-tier
+      - back-tier
+
+# Définir les réseaux (en bridge automatiquement)
+networks:
+  poll-tier:
+  result-tier:
+  back-tier:
+
+# Définir le volume
+volumes:
+  db-data:
